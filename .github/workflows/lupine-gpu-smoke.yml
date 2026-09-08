@@ -16,7 +16,7 @@ jobs:
     # `self-hosted` is added by GitHub automatically; `lupine-gpu` is the label
     # the JIT registration carried. GitHub dispatches only to a runner holding
     # every label named here.
-    runs-on: [self-hosted, lupine-gpu]
+    runs-on: [lupine-gpu]
     steps:
       - uses: actions/checkout@v4
 
