@@ -1,0 +1,82 @@
+# Drop this into a test repo as .github/workflows/lupine-gpu-smoke.yml to verify
+# a Lupine-hosted runner end to end. It asserts the three properties that make
+# the `github-actions` runtime worth having, and fails loudly if any is missing.
+#
+# Phase 1 (hand-minted registration): `mise run smoke:gha -- owner/repo lupine-gpu`
+# Phase 2 (GitHub App): the same file works unchanged with `runs-on: lupine-a100`.
+name: lupine gpu smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  gpu:
+    # `self-hosted` is added by GitHub automatically; `lupine-gpu` is the label
+    # the JIT registration carried. GitHub dispatches only to a runner holding
+    # every label named here.
+    runs-on: [self-hosted, lupine-gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. The GPU is present with no auth step at all. The runner pod already
+      #    has the shims LD_PRELOADed and LUPINE_SESSION/LUPINE_SERVER set from
+      #    the run's GPU grant, so this is the whole promise of the feature.
+      - name: GPU is visible with no setup step
+        run: |
+          set -eux
+          test -n "${LUPINE_SESSION:-}" || { echo "no LUPINE_SESSION: not a Lupine runner"; exit 1; }
+          echo "session=$LUPINE_SESSION server=$LUPINE_SERVER"
+          nvidia-smi
+
+      # 2. Egress: the public internet is reachable (CI needs github.com, PyPI,
+      #    npm) while the control plane and cloud metadata are not.
+      - name: Egress policy is enforced
+        run: |
+          set -u
+          fail=0
+          ok()   { echo "  OK   $1"; }
+          bad()  { echo "  FAIL $1"; fail=1; }
+
+          # Reachable: this is what makes CI usable at all.
+          curl -sfm 10 https://api.github.com/zen >/dev/null \
+            && ok "api.github.com reachable" || bad "api.github.com UNREACHABLE"
+
+          # Denied: cloud metadata is the highest-value target for a hostile job.
+          curl -sm 5 http://169.254.169.254/ >/dev/null 2>&1 \
+            && bad "cloud metadata REACHABLE" || ok "cloud metadata denied"
+
+          # Denied: the coordinator and the agent's own listeners.
+          curl -sm 5 http://coordinator:8080/health >/dev/null 2>&1 \
+            && bad "coordinator REACHABLE" || ok "coordinator denied"
+          curl -sm 5 http://127.0.0.1:9091/metrics >/dev/null 2>&1 \
+            && bad "agent metrics port REACHABLE" || ok "agent metrics port denied"
+          curl -sm 5 http://127.0.0.1:17001/ >/dev/null 2>&1 \
+            && bad "agent exec port REACHABLE" || ok "agent exec port denied"
+
+          exit $fail
+
+      # 3. The job is unprivileged and isolated: a per-user uid, not root, with a
+      #    scratch HOME that is wiped when the run ends.
+      - name: Job runs unprivileged in per-run scratch
+        run: |
+          set -eux
+          test "$(id -u)" -ne 0 || { echo "running as root; uid isolation is not in effect"; exit 1; }
+          id
+          echo "HOME=$HOME"
+          test "$HOME" != "/root"
+
+      # 4. Optional: real CUDA through the forwarded path. Remove if torch's
+      #    download makes the smoke too slow.
+      - name: torch sees the leased GPU
+        run: |
+          set -eux
+          python3 -m pip install --quiet --no-input torch
+          python3 - <<'PY'
+          import torch
+          assert torch.cuda.is_available(), "torch cannot see the leased GPU"
+          print("device:", torch.cuda.get_device_name(0))
+          x = torch.randn(2048, 2048, device="cuda")
+          print("matmul ok:", float((x @ x).sum()))
+          PY
