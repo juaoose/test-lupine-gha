@@ -15,12 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create tiny workload
-        run: |
-          cat > train.py <<'PY'
-          print("hello from lupine remote runner")
-          PY
-
       - name: Run on Lupine
         uses: lupinemachines/setup-client@juan/simpler
         with:
