@@ -25,5 +25,5 @@ jobs:
         uses: lupinemachines/setup-client@juan/simpler
         with:
           cuda-version: 13.3.1
-          command: python train.py
+          command: python3 train.py
           no-artifacts: "true"
