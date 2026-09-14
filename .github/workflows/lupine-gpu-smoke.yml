@@ -20,4 +20,5 @@ jobs:
         with:
           cuda-version: 13.3.1
           command: python3 train.py
+          pip: torch
           no-artifacts: "true"
