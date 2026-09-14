@@ -1,26 +1,15 @@
-import ctypes
+import torch
 
 
-def check(code, call):
-    if code != 0:
-        raise RuntimeError(f"{call} failed with CUDA code {code}")
+if not torch.cuda.is_available():
+    raise RuntimeError("torch cannot see a CUDA device")
 
-
-cuda = ctypes.CDLL("libcuda.so.1")
-
-check(cuda.cuInit(0), "cuInit")
-
-count = ctypes.c_int()
-check(cuda.cuDeviceGetCount(ctypes.byref(count)), "cuDeviceGetCount")
-if count.value < 1:
-    raise RuntimeError("no CUDA devices visible")
-
-device = ctypes.c_int()
-check(cuda.cuDeviceGet(ctypes.byref(device), 0), "cuDeviceGet")
-
-name = ctypes.create_string_buffer(256)
-check(cuda.cuDeviceGetName(name, len(name), device), "cuDeviceGetName")
+device_name = torch.cuda.get_device_name(0)
+x = torch.randn(1024, 1024, device="cuda")
+y = x @ x
 
 print("hello from lupine remote runner")
-print(f"cuda devices visible: {count.value}")
-print(f"cuda device 0: {name.value.decode()}")
+print(f"torch version: {torch.__version__}")
+print(f"cuda devices visible: {torch.cuda.device_count()}")
+print(f"cuda device 0: {device_name}")
+print(f"matmul checksum: {float(y.sum()):.4f}")
