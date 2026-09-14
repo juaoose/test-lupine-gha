@@ -2,6 +2,8 @@ name: Lupine GitHub Actions smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -22,5 +24,6 @@ jobs:
       - name: Run on Lupine
         uses: lupinemachines/setup-client@juan/simpler
         with:
+          cuda-version: 13.3.1
           command: python train.py
           no-artifacts: "true"
